@@ -1,4 +1,4 @@
-<img width="936" height="616" alt="image" src="https://github.com/user-attachments/assets/22b159e2-fec2-4b65-aac4-c4759ade61f3" /># Modern Compliance Stack Map
+# Modern Compliance Stack Map
 
 An interactive visualization of how infrastructure, identity systems, and compliance workflows intersect — and where audit bottlenecks are created.
 

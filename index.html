@@ -1,0 +1,276 @@
+
+<style>
+* { box-sizing: border-box; }
+#mcsm { font-family: var(--font-sans); padding: 1rem 0; }
+.mcsm-hdr h2 { font-size: 15px; font-weight: 500; color: var(--color-text-primary); margin: 0 0 3px; }
+.mcsm-hdr p { font-size: 11px; color: var(--color-text-secondary); margin: 0 0 1rem; }
+.mcsm-steps { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: .9rem; }
+.mcsm-step { font-size: 10px; font-weight: 500; padding: 4px 11px; border-radius: 20px; border: 0.5px solid var(--color-border-secondary); background: var(--color-background-secondary); color: var(--color-text-secondary); cursor: pointer; transition: all 0.15s; }
+#mcsm-insight { font-size: 12px; line-height: 1.65; color: var(--color-text-secondary); padding: 10px 14px; border-left: 3px solid #3C3489; background: var(--color-background-secondary); border-radius: 0 6px 6px 0; margin-bottom: 1rem; min-height: 36px; }
+#mcsm-svg { width: 100%; overflow-x: auto; position: relative; }
+.mcsm-tt { position: absolute; background: var(--color-background-primary); border: 0.5px solid var(--color-border-secondary); border-radius: 6px; padding: 8px 12px; font-size: 11px; color: var(--color-text-primary); pointer-events: none; opacity: 0; transition: opacity 0.12s; max-width: 210px; line-height: 1.5; z-index: 10; }
+.mcsm-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 1rem; }
+.mcsm-li { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--color-text-secondary); }
+.mcsm-ld { width: 9px; height: 9px; border-radius: 2px; }
+</style>
+
+<div id="mcsm">
+  <div class="mcsm-hdr">
+    <h2>The Modern Compliance Stack Map</h2>
+    <p>How infrastructure, identity systems, and compliance workflows intersect — and where orchestration is required.</p>
+  </div>
+  <div class="mcsm-steps" id="mcsm-steps"></div>
+  <div id="mcsm-insight">Select a step to trace the narrative. Hover any node to explore its full path.</div>
+  <div id="mcsm-svg"><div class="mcsm-tt" id="mcsm-tt"></div></div>
+  <div class="mcsm-legend">
+    <div class="mcsm-li"><div class="mcsm-ld" style="background:#888780"></div>Infrastructure</div>
+    <div class="mcsm-li"><div class="mcsm-ld" style="background:#378ADD"></div>Evidence</div>
+    <div class="mcsm-li"><div class="mcsm-ld" style="background:#534AB7"></div>Workflow</div>
+    <div class="mcsm-li"><div class="mcsm-ld" style="background:#993C1D"></div>Pain</div>
+    <div class="mcsm-li"><div class="mcsm-ld" style="background:#0F6E56"></div>CaaS — resolves</div>
+    <div class="mcsm-li"><div class="mcsm-ld" style="background:#185FA5"></div>IDaaS — partial</div>
+    <div class="mcsm-li"><div class="mcsm-ld" style="background:#5F5E5A"></div>SaaS — source only</div>
+    <div class="mcsm-li" style="margin-left:auto;font-style:italic;">Dominant path highlighted · hover to explore</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+(function(){
+
+const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+
+const C = {
+  infra: { node: isDark?'#B4B2A9':'#888780', dim:'rgba(136,135,128,0.12)', base:'rgba(136,135,128,0.25)', hl:'rgba(136,135,128,0.8)' },
+  evid:  { node: isDark?'#85B7EB':'#378ADD', dim:'rgba(55,138,221,0.1)',   base:'rgba(55,138,221,0.22)',  hl:'rgba(55,138,221,0.78)' },
+  work:  { node: isDark?'#AFA9EC':'#534AB7', dim:'rgba(83,74,183,0.1)',    base:'rgba(83,74,183,0.22)',   hl:'rgba(83,74,183,0.78)' },
+  pain:  { node: isDark?'#F0997B':'#993C1D', dim:'rgba(153,60,29,0.1)',    base:'rgba(153,60,29,0.22)',   hl:'rgba(153,60,29,0.78)' },
+  caas:  { node: isDark?'#5DCAA5':'#0F6E56', dim:'rgba(15,110,86,0.12)',   base:'rgba(15,110,86,0.25)',   hl:'rgba(15,110,86,0.85)' },
+  idaas: { node: isDark?'#85B7EB':'#185FA5', dim:'rgba(24,95,165,0.1)',    base:'rgba(24,95,165,0.22)',   hl:'rgba(24,95,165,0.78)' },
+  saas:  { node: isDark?'#888780':'#5F5E5A', dim:'rgba(95,94,90,0.08)',    base:'rgba(95,94,90,0.18)',    hl:'rgba(95,94,90,0.7)'  },
+};
+
+const DOMINANT = new Set(['n_aws','n_gh','n_okta','e_config','e_commits','e_auth','w_manual','p_itcm','t_caas']);
+
+const steps = [
+  { id:'all',   col:'#3C3489', label:'Full map',            insight:'One root cause radiates across every team that touches compliance. Follow the dominant path — infrastructure to evidence to manual effort to pain — and the argument builds itself.' },
+  { id:'infra', col:'#888780', label:'1 · Infrastructure',  insight:'AWS, GitHub, Okta, Jira, and SaaS platforms produce compliance-relevant data continuously. None of them were built to export audit-ready evidence. That gap is where manual work begins.' },
+  { id:'evid',  col:'#378ADD', label:'2 · Evidence',        insight:'Configuration states, commit history, authentication logs, ticket records — evidence exists inside every operational system. The problem is not its existence. It\'s that extracting it requires human effort every audit cycle.' },
+  { id:'work',  col:'#534AB7', label:'3 · Workflow',        insight:'Without automation, all evidence paths converge on the same bottleneck — manual collection, evidence chasing, control validation, audit preparation. This is where weeks of team time disappear before every audit.' },
+  { id:'pain',  col:'#993C1D', label:'4 · Pain',            insight:'One workflow breakdown radiates across every role. IT Compliance owns the collection exercise. Engineering absorbs the interruptions. Security loses visibility. The CISO faces the audit unprepared.' },
+  { id:'tech',  col:'#0F6E56', label:'5 · Technology',      insight:'SaaS produces the data. IDaaS manages identity — partially resolving access evidence. Only the compliance orchestration layer resolves the workflow breakdown entirely. That gap is what most teams are missing.' },
+];
+
+const layers = [
+  { id:'infra', cat:'infra', label:'Infrastructure',
+    nodes:[
+      { id:'n_aws',  label:'AWS',         detail:'Cloud configuration states and access logs — compliance-critical evidence pulled manually without automation.' },
+      { id:'n_gh',   label:'GitHub',      detail:'Commit history and deployment approvals serve as change management evidence — rarely integrated automatically into GRC.' },
+      { id:'n_okta', label:'Okta',        detail:'Authentication event logs carry access evidence — typically exported manually per audit cycle.' },
+      { id:'n_jira', label:'Jira',        detail:'Ticket records and change approvals are compliance artifacts — retrieved manually per audit request.' },
+      { id:'n_saas', label:'SaaS Tools',  detail:'Monday, SAP, Salesforce — business systems generating process-relevant data with no native compliance export pathway.' },
+    ]
+  },
+  { id:'evid', cat:'evid', label:'Evidence',
+    nodes:[
+      { id:'e_config',  label:'Config states',   detail:'Cloud and system snapshots required for infrastructure controls — pulled manually from AWS per audit cycle.' },
+      { id:'e_commits', label:'Commit history',  detail:'Deployment and code change records as process control evidence — scattered across GitHub without a central compliance record.' },
+      { id:'e_auth',    label:'Auth logs',        detail:'Universal audit requirement — access to what, when, by whom. Extracted manually from Okta and Active Directory per cycle.' },
+      { id:'e_tickets', label:'Ticket records',  detail:'Change approval and incident records as compliance evidence — manually retrieved from Jira per audit window.' },
+      { id:'e_activity',label:'Activity logs',   detail:'Business process and user activity records from SaaS platforms — no standard export pathway into compliance workflows.' },
+    ]
+  },
+  { id:'work', cat:'work', label:'Workflow breakdown',
+    nodes:[
+      { id:'w_manual', label:'Manual collection',  detail:'The dominant gravity point — all evidence paths converge here. Screenshots, exports, Slack requests, email threads. Repeated before every audit cycle.' },
+      { id:'w_chase',  label:'Evidence chasing',   detail:'Teams hunting for proof across systems — who has it, which version is current, which format the auditor needs. Hours per control.' },
+      { id:'w_val',    label:'Control validation', detail:'Confirming evidence maps to control requirements — exponentially harder across multiple frameworks without automation.' },
+      { id:'w_prep',   label:'Audit preparation',  detail:'Everything assembled under deadline. Reactive rather than continuous. Each audit starts from scratch.' },
+    ]
+  },
+  { id:'pain', cat:'pain', label:'Persona pain',
+    nodes:[
+      { id:'p_itcm', label:'IT Compliance overload',    detail:'Owns the evidence coordination exercise. Weeks before every audit chasing artifacts from engineering, cloud, and identity teams.' },
+      { id:'p_eng',  label:'Engineering interruptions', detail:'Sprint cycles disrupted by ad-hoc evidence requests. Compliance is an unplanned external demand, not an embedded workflow.' },
+      { id:'p_sec',  label:'Security blind spots',      detail:'No continuous visibility into control effectiveness between audits. Blind spots exist despite owning the compliance program.' },
+      { id:'p_fire', label:'Audit fire drills',         detail:'Audit preparation is a crisis not a process — evidence assembled under deadline pressure, every cycle, from scratch.' },
+    ]
+  },
+  { id:'tech', cat:'caas', label:'Technology layer',
+    nodes:[
+      { id:'t_caas',  label:'CaaS — resolves',    cat:'caas',  detail:'Compliance orchestration connects directly to infrastructure — automating evidence collection, cross-framework mapping, and continuous posture. Audit preparation becomes validation.' },
+      { id:'t_idaas', label:'IDaaS — partial',    cat:'idaas', detail:'Identity systems manage access evidence partially — authentication logs and provisioning records are captured, but manual extraction into compliance workflows persists without integration.' },
+      { id:'t_saas',  label:'SaaS — source only', cat:'saas',  detail:'SaaS platforms generate the data but do not manage compliance. They are the origin of the evidence burden — not the resolution of it.' },
+    ]
+  }
+];
+
+const links = [
+  {s:'n_aws',  t:'e_config',  v:9, dom:true },
+  {s:'n_aws',  t:'e_auth',    v:6, dom:false},
+  {s:'n_gh',   t:'e_commits', v:9, dom:true },
+  {s:'n_gh',   t:'e_activity',v:4, dom:false},
+  {s:'n_okta', t:'e_auth',    v:9, dom:true },
+  {s:'n_okta', t:'e_config',  v:4, dom:false},
+  {s:'n_jira', t:'e_tickets', v:9, dom:false},
+  {s:'n_jira', t:'e_activity',v:4, dom:false},
+  {s:'n_saas', t:'e_activity',v:8, dom:false},
+  {s:'n_saas', t:'e_tickets', v:5, dom:false},
+
+  {s:'e_config',  t:'w_manual', v:9, dom:true },
+  {s:'e_config',  t:'w_val',    v:6, dom:false},
+  {s:'e_commits', t:'w_chase',  v:8, dom:true },
+  {s:'e_commits', t:'w_manual', v:6, dom:false},
+  {s:'e_auth',    t:'w_manual', v:8, dom:true },
+  {s:'e_auth',    t:'w_val',    v:7, dom:false},
+  {s:'e_tickets', t:'w_prep',   v:8, dom:false},
+  {s:'e_tickets', t:'w_chase',  v:6, dom:false},
+  {s:'e_activity',t:'w_manual', v:7, dom:false},
+  {s:'e_activity',t:'w_prep',   v:5, dom:false},
+
+  {s:'w_manual', t:'p_itcm', v:9, dom:true },
+  {s:'w_manual', t:'p_sec',  v:5, dom:false},
+  {s:'w_chase',  t:'p_eng',  v:9, dom:true },
+  {s:'w_chase',  t:'p_itcm', v:6, dom:false},
+  {s:'w_val',    t:'p_sec',  v:8, dom:false},
+  {s:'w_val',    t:'p_itcm', v:6, dom:false},
+  {s:'w_prep',   t:'p_fire', v:9, dom:false},
+  {s:'w_prep',   t:'p_itcm', v:7, dom:false},
+
+  {s:'p_itcm', t:'t_caas',  v:9, dom:true },
+  {s:'p_eng',  t:'t_caas',  v:7, dom:false},
+  {s:'p_sec',  t:'t_idaas', v:6, dom:false},
+  {s:'p_fire', t:'t_caas',  v:8, dom:false},
+  {s:'p_fire', t:'t_saas',  v:3, dom:false},
+];
+
+const nodeById = {};
+layers.forEach((l,li) => l.nodes.forEach(n => {
+  if(!n.cat) n.cat = l.cat;
+  n.layer=li; nodeById[n.id]=n;
+}));
+
+const W = Math.min(980, window.innerWidth-24);
+const H = 500;
+const mg = {top:34,right:140,bottom:20,left:140};
+const iW=W-mg.left-mg.right, iH=H-mg.top-mg.bottom;
+const nH=23, nPad=8, nW=18;
+const xPos = layers.map((_,i)=>(i/(layers.length-1))*iW);
+
+layers.forEach((l,li)=>{
+  const tot=l.nodes.length*nH+(l.nodes.length-1)*nPad;
+  const sy=(iH-tot)/2;
+  l.nodes.forEach((n,i)=>{ n.x=xPos[li]; n.y=sy+i*(nH+nPad); n.cy=n.y+nH/2; });
+});
+
+const maxV=d3.max(links,d=>d.v);
+const sw=d3.scaleLinear().domain([1,maxV]).range([1,8]);
+const domSw=d3.scaleLinear().domain([1,maxV]).range([2,10]);
+
+const svg=d3.select('#mcsm-svg').append('svg')
+  .attr('viewBox',`0 0 ${W} ${H}`).attr('width','100%').style('display','block');
+const g=svg.append('g').attr('transform',`translate(${mg.left},${mg.top})`);
+
+function lp(l){
+  const s=nodeById[l.s],t=nodeById[l.t];
+  const x1=s.x+nW,y1=s.cy,x2=t.x,y2=t.cy,cx=(x1+x2)/2;
+  return `M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`;
+}
+
+function lcat(d){ return nodeById[d.s].cat; }
+function lbase(d){ return C[lcat(d)].base; }
+function lhl(d){ return C[lcat(d)].hl; }
+function ldim(d){ return C[lcat(d)].dim; }
+
+const lsel=g.append('g').selectAll('path').data(links).join('path')
+  .attr('d',lp).attr('fill','none')
+  .attr('stroke',d=>lbase(d))
+  .attr('stroke-width',d=>d.dom?domSw(d.v):sw(d.v))
+  .attr('stroke-linecap','round')
+  .attr('opacity',d=>d.dom?1:0.6)
+  .style('cursor','pointer');
+
+const tip=document.getElementById('mcsm-tt');
+const ins=document.getElementById('mcsm-insight');
+function showTip(e,h){tip.innerHTML=h;tip.style.opacity='1';mvT(e);}
+function mvT(e){const r=document.getElementById('mcsm-svg').getBoundingClientRect();tip.style.left=Math.min(e.clientX-r.left+12,r.width-215)+'px';tip.style.top=(e.clientY-r.top+12)+'px';}
+function hideTip(){tip.style.opacity='0';}
+
+const allN=layers.flatMap(l=>l.nodes);
+const ngs=g.append('g').selectAll('g').data(allN).join('g')
+  .attr('transform',d=>`translate(${d.x},${d.y})`).style('cursor','pointer');
+
+ngs.append('rect').attr('width',nW).attr('height',nH).attr('rx',3)
+  .attr('fill',d=>C[d.cat].node).attr('opacity',d=>DOMINANT.has(d.id)?1:0.78);
+
+ngs.each(function(d){
+  const isF=d.layer===0,isL=d.layer===layers.length-1;
+  d3.select(this).append('text')
+    .attr('x',isF?-7:isL?nW+7:nW/2).attr('y',nH/2).attr('dy','0.35em')
+    .attr('text-anchor',isF?'end':isL?'start':'middle')
+    .attr('font-size','10.5px').attr('font-weight',d=>DOMINANT.has(d.id)?'500':'400')
+    .attr('fill','var(--color-text-primary)').text(d.label);
+});
+
+function hlNode(hNode){
+  const cL=new Set(),cN=new Set([hNode.id]);
+  function exp(id,dir){links.forEach((l,i)=>{if(dir==='fwd'&&l.s===id&&!cN.has(l.t)){cL.add(i);cN.add(l.t);exp(l.t,'fwd');}if(dir==='bwd'&&l.t===id&&!cN.has(l.s)){cL.add(i);cN.add(l.s);exp(l.s,'bwd');}});}
+  links.forEach((l,i)=>{if(l.s===hNode.id||l.t===hNode.id){cL.add(i);cN.add(l.s);cN.add(l.t);}});
+  exp(hNode.id,'fwd');exp(hNode.id,'bwd');
+  lsel.attr('opacity',(d,i)=>cL.has(i)?1:0.04).attr('stroke',(d,i)=>cL.has(i)?lhl(d):ldim(d)).attr('stroke-width',(d,i)=>cL.has(i)?(d.dom?domSw(d.v):sw(d.v)):1);
+  ngs.select('rect').attr('opacity',d=>cN.has(d.id)?1:0.08);
+  ngs.select('text').attr('opacity',d=>cN.has(d.id)?1:0.08);
+}
+
+function filterCat(cat){
+  const techCats=new Set(['caas','idaas','saas']);
+  const match = techCats.has(cat)
+    ? allN.filter(n=>techCats.has(n.cat))
+    : allN.filter(n=>n.cat===cat||n.cat===layers.find(l=>l.id===cat)?.cat);
+  const targetCat = cat==='tech' ? null : cat;
+  const catN = targetCat ? new Set(allN.filter(n=>n.cat===targetCat||n.layer===layers.findIndex(l=>l.id===cat)).map(n=>n.id)) : new Set(allN.filter(n=>techCats.has(n.cat)).map(n=>n.id));
+  const cL=new Set(),cN=new Set();
+  catN.forEach(nid=>{
+    function exp(id,dir){links.forEach((l,i)=>{if(dir==='fwd'&&l.s===id&&!cN.has(l.t)){cL.add(i);cN.add(l.t);exp(l.t,'fwd');}if(dir==='bwd'&&l.t===id&&!cN.has(l.s)){cL.add(i);cN.add(l.s);exp(l.s,'bwd');}});}
+    cN.add(nid);exp(nid,'fwd');exp(nid,'bwd');
+    links.forEach((l,i)=>{if(l.s===nid||l.t===nid){cL.add(i);cN.add(l.s);cN.add(l.t);}});
+  });
+  lsel.transition().duration(280).attr('opacity',(d,i)=>cL.has(i)?1:0.03).attr('stroke',(d,i)=>cL.has(i)?lhl(d):ldim(d)).attr('stroke-width',(d,i)=>cL.has(i)?(d.dom?domSw(d.v):sw(d.v)):0.8);
+  ngs.select('rect').transition().duration(280).attr('opacity',d=>cN.has(d.id)?1:0.07);
+  ngs.select('text').transition().duration(280).attr('opacity',d=>cN.has(d.id)?1:0.07);
+}
+
+function resetAll(){
+  lsel.transition().duration(280).attr('opacity',d=>d.dom?1:0.6).attr('stroke',d=>lbase(d)).attr('stroke-width',d=>d.dom?domSw(d.v):sw(d.v));
+  ngs.select('rect').transition().duration(280).attr('opacity',d=>DOMINANT.has(d.id)?1:0.78);
+  ngs.select('text').transition().duration(280).attr('opacity',1);
+}
+
+ngs.on('mouseenter',(e,d)=>{hlNode(d);showTip(e,d.detail);}).on('mousemove',mvT).on('mouseleave',()=>{hideTip();});
+lsel.on('mouseenter',(e,d)=>{hlNode(nodeById[d.s]);showTip(e,`<strong>${nodeById[d.s].label}</strong> → <strong>${nodeById[d.t].label}</strong>${d.dom?' <span style="color:#0F6E56">◆ dominant path</span>':''}`)}).on('mousemove',mvT).on('mouseleave',()=>{hideTip();});
+
+const lLbls=layers.map((l,i)=>{
+  const cols={infra:C.infra.node,evid:C.evid.node,work:C.work.node,pain:C.pain.node,tech:C.caas.node};
+  return {label:l.label,col:cols[l.id]||C.caas.node,x:xPos[i]+(i===0?0:i===layers.length-1?nW:nW/2),anchor:i===0?'start':i===layers.length-1?'end':'middle'};
+});
+g.append('g').selectAll('text').data(lLbls).join('text')
+  .attr('x',d=>d.x).attr('y',-12).attr('text-anchor',d=>d.anchor)
+  .attr('font-size','10.5px').attr('font-weight','500').attr('fill',d=>d.col).text(d=>d.label);
+
+const bar=document.getElementById('mcsm-steps');
+steps.forEach(s=>{
+  const btn=document.createElement('button');
+  btn.className='mcsm-step'+(s.id==='all'?' active':'');
+  btn.textContent=s.label;
+  if(s.id==='all'){btn.style.background=s.col;btn.style.color='#fff';btn.style.borderColor=s.col;}
+  btn.onclick=()=>{
+    document.querySelectorAll('.mcsm-step').forEach(b=>{b.style.background='var(--color-background-secondary)';b.style.color='var(--color-text-secondary)';b.style.borderColor='var(--color-border-secondary)';});
+    btn.style.background=s.col;btn.style.color='#fff';btn.style.borderColor=s.col;
+    ins.textContent=s.insight;
+    if(s.id==='all') resetAll(); else filterCat(s.id);
+  };
+  bar.appendChild(btn);
+});
+
+})();
+</script>

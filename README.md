@@ -16,9 +16,8 @@ This map visualizes how those breakdowns occur across:
 - Infrastructure → Evidence → Workflow → Pain → Resolution  
 
 ## Live Demo
-
-👉 View the interactive version here:  
-[Open the Compliance Map](https://altvu.github.io/compliance-map/)
+  
+[Open the Interactive Compliance Map](https://altvu.github.io/compliance-map/)
 
 ## What This Shows
 
